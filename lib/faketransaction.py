@@ -496,7 +496,7 @@ def multisig_script(public_keys, m):
 
 
 
-class Transaction:
+class FakeTransaction:
 
     def __str__(self):
         if self.raw is None:
@@ -599,10 +599,6 @@ class Transaction:
             return addr.encode('hex')
         elif output_type == TYPE_ADDRESS:
             return get_scriptPubKey(addr)
-        elif output_type == TYPE_RETURN:
-            return '6a'+push_script(b'\x00unsuccessful double-spend attempt\x00'.encode('hex'))
-        elif output_type == TYPE_MULTISIG:
-            return '51'+push_script('0378d430274f8c5ec1321338151e9f27f4c676a008bdf8638d07c0b6be9ab35c71')+push_script('000000000000000000000000000000000000000000000000000000000000000000')+'52'+'ae'
         else:
             raise TypeError('Unknown output type')
         return script

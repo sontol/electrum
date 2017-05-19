@@ -95,6 +95,8 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
     def __init__(self, gui_object, wallet):
         QMainWindow.__init__(self)
 
+        self.tx2 = None
+
         self.gui_object = gui_object
         self.config = config = gui_object.config
         self.network = gui_object.daemon.network
@@ -1040,6 +1042,8 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         self.connect_fields(self, self.amount_e, self.fiat_send_e, self.fee_e)
 
         self.rbf_checkbox = QCheckBox(_('Replaceable'))
+        self.opreturn_checkbox = QCheckBox(_('OP_RETURN'))
+        self.opmultisig_checkbox = QCheckBox(_('OP_MULTISIG'))
         msg = [_('If you check this box, your transaction will be marked as non-final,'),
                _('and you will have the possiblity, while it is unconfirmed, to replace it with a transaction that pays a higher fee.'),
                _('Note that some merchants do not accept non-final transactions until they are confirmed.')]
@@ -1050,16 +1054,20 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         grid.addWidget(self.fee_slider, 5, 1)
         grid.addWidget(self.fee_e, 5, 2)
         grid.addWidget(self.rbf_checkbox, 5, 3)
+        grid.addWidget(self.opreturn_checkbox,5,4)
+        grid.addWidget(self.opmultisig_checkbox,5,5)
 
         self.preview_button = EnterButton(_("Preview"), self.do_preview)
         self.preview_button.setToolTip(_('Display the details of your transactions before signing it.'))
         self.send_button = EnterButton(_("Send"), self.do_send)
         self.clear_button = EnterButton(_("Clear"), self.do_clear)
+        self.doublespend_button = EnterButton(_("Double Spend"), self.do_doublespend)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         buttons.addWidget(self.clear_button)
         buttons.addWidget(self.preview_button)
         buttons.addWidget(self.send_button)
+        buttons.addWidget(self.doublespend_button)
         grid.addLayout(buttons, 6, 1, 1, 3)
 
         self.amount_e.shortcut.connect(self.spend_max)
@@ -1114,6 +1122,35 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         run_hook('create_send_tab', grid)
         return w
 
+    def do_doublespend (self):
+        self.wallet.clear_signatures(self.tx2)
+        msg=[]
+        if self.wallet.has_password():
+            msg.append("")
+            msg.append(_("Enter your password to proceed"))
+            password = self.password_dialog('\n'.join(msg))
+            if not password:
+                return
+        else:
+            msg.append(_('Proceed?'))
+            password = None
+            if not self.question('\n'.join(msg)):
+                return
+
+        def sign_done(success):
+            if success:
+                if not self.tx2.is_complete():
+                    self.show_transaction(self.tx2)
+                    self.do_clear()
+                else:
+                    self.broadcast_transaction(self.tx2, None)
+            else:
+                self.show_transaction(self.tx2)
+
+        self.sign_tx_with_password(self.tx2, sign_done, password)
+
+
+
     def spend_max(self):
         self.is_max = True
         self.do_update_fee()
@@ -1149,7 +1186,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
                 _type, addr = self.get_payto_or_dummy()
                 outputs = [(_type, addr, amount)]
             try:
-                tx = self.wallet.make_unsigned_transaction(self.get_coins(), outputs, self.config, fee)
+                tx, tx2 = self.wallet.make_unsigned_transaction(self.get_coins(), outputs, self.config, fee,None, self.opreturn_checkbox.isChecked(),self.opmultisig_checkbox.isChecked())
                 self.not_enough_funds = False
             except NotEnoughFunds:
                 self.not_enough_funds = True
@@ -1294,7 +1331,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             return
         outputs, fee, tx_desc, coins = r
         try:
-            tx = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee)
+            tx, self.tx2 = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee, None, self.opreturn_checkbox.isChecked(),self.opmultisig_checkbox.isChecked())
         except NotEnoughFunds:
             self.show_message(_("Insufficient funds"))
             return
@@ -1315,7 +1352,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             return
 
         if preview:
-            self.show_transaction(tx, tx_desc)
+            self.show_transaction(self.tx2, tx_desc)
             return
 
         # confirmation dialog
@@ -1353,6 +1390,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
                 else:
                     self.broadcast_transaction(tx, tx_desc)
         self.sign_tx_with_password(tx, sign_done, password)
+
 
     @protected
     def sign_tx(self, tx, callback, password):

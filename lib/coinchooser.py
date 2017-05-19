@@ -26,7 +26,7 @@
 from collections import defaultdict, namedtuple
 from math import floor, log10
 
-from bitcoin import sha256, COIN, TYPE_ADDRESS
+from bitcoin import sha256, COIN, TYPE_ADDRESS, TYPE_RETURN, TYPE_MULTISIG
 from transaction import Transaction
 from util import NotEnoughFunds, PrintError, profiler
 
@@ -108,7 +108,10 @@ class CoinChooserBase(PrintError):
         # Break change up if bigger than max_change
         output_amounts = [o[2] for o in tx.outputs()]
         # Don't split change of less than 0.02 BTC
-        max_change = max(max(output_amounts) * 1.25, 0.02 * COIN)
+        if not output_amounts:
+            max_change = 0.02*COIN
+        else:
+            max_change = max(max(output_amounts) * 1.25, 0.02 * COIN)
 
         # Use N change outputs
         for n in range(1, count + 1):
@@ -123,10 +126,12 @@ class CoinChooserBase(PrintError):
             s = str(val)
             return len(s) - len(s.rstrip('0'))
 
-        zeroes = map(trailing_zeroes, output_amounts)
-        min_zeroes = min(zeroes)
-        max_zeroes = max(zeroes)
-        zeroes = range(max(0, min_zeroes - 1), (max_zeroes + 1) + 1)
+        if output_amounts:
+
+            zeroes = map(trailing_zeroes, output_amounts)
+            min_zeroes = min(zeroes)
+            max_zeroes = max(zeroes)
+            zeroes = range(max(0, min_zeroes - 1), (max_zeroes + 1) + 1)
 
         # Calculate change; randomize it a bit if using more than 1 output
         remaining = change_amount
@@ -134,7 +139,10 @@ class CoinChooserBase(PrintError):
         while n > 1:
             average = remaining // n
             amount = self.p.randint(int(average * 0.7), int(average * 1.3))
-            precision = min(self.p.choice(zeroes), int(floor(log10(amount))))
+            if not output_amounts:
+                precision = int(floor(log10(amount)))
+            else:
+                precision = min(self.p.choice(zeroes), int(floor(log10(amount))))
             amount = int(round(amount, -precision))
             amounts.append(amount)
             remaining -= amount
@@ -142,7 +150,10 @@ class CoinChooserBase(PrintError):
 
         # Last change output.  Round down to maximum precision but lose
         # no more than 100 satoshis to fees (2dp)
-        N = pow(10, min(2, zeroes[0]))
+        if not output_amounts:
+            N = pow(10,2)
+        else:
+            N = pow(10, min(2, zeroes[0]))
         amount = (remaining // N) * N
         amounts.append(amount)
 
@@ -167,7 +178,7 @@ class CoinChooserBase(PrintError):
         return change
 
     def make_tx(self, coins, outputs, change_addrs, fee_estimator,
-                dust_threshold):
+                dust_threshold, relayFeePerByte, isOpreturn=None,isOpmultisig=None):
         '''Select unspent coins to spend to pay outputs.  If the change is
         greater than dust_threshold (after adding the change output to
         the transaction) it is kept, otherwise none is sent and it is
@@ -179,9 +190,21 @@ class CoinChooserBase(PrintError):
 
         # Copy the ouputs so when adding change we don't modify "outputs"
         tx = Transaction.from_io([], outputs[:])
+        tx2 = Transaction.from_io([],[])
+
         # Size of the transaction with no inputs and no change
         base_size = tx.estimated_size()
         spent_amount = tx.output_value()
+
+        if isOpreturn:
+            opreturn_address = [(TYPE_RETURN,change_addrs[0],0)]
+            tx.add_outputs(opreturn_address)
+
+
+        if isOpmultisig:
+            opmultisig_address = [(TYPE_MULTISIG, change_addrs[0], dust_threshold)]
+            tx.add_outputs(opmultisig_address)
+
 
         def sufficient_funds(buckets):
             '''Given a list of buckets, return True if it has enough
@@ -196,6 +219,8 @@ class CoinChooserBase(PrintError):
                                       self.penalty_func(tx))
 
         tx.add_inputs([coin for b in buckets for coin in b.coins])
+        tx2.add_inputs([coin for b in buckets for coin in b.coins])
+
         tx_size = base_size + sum(bucket.size for bucket in buckets)
 
         # This takes a count of change outputs and returns a tx fee;
@@ -204,10 +229,44 @@ class CoinChooserBase(PrintError):
         change = self.change_outputs(tx, change_addrs, fee, dust_threshold)
         tx.add_outputs(change)
 
+
+        #relay fee = relayfee/byte * (current tx size + 1 output)
+        relayFee=relayFeePerByte * (tx_size + 34)/1000 + 1
+
+
+        def enoughRelayfee(buckets):
+            total_input = sum(bucket.value for bucket in buckets)
+            total_size = sum(bucket.size for bucket in buckets) + base_size
+            return total_input >= relayFee - spent_amount + fee_estimator(total_size)
+
+        spent_amount = sum (o[2] for o in tx.outputs())
+
+        #Do we have enough to cover additional relay fees?
+        if spent_amount < relayFee:
+            unselected_coins=coins[:]
+            for coin in tx.inputs():
+                  unselected_coins.remove(coin)
+            buckets = self.bucketize_coins(unselected_coins)
+            buckets = self.choose_buckets(buckets, enoughRelayfee, self.penalty_func(tx2))
+            tx2.add_inputs([coin for b in buckets for coin in b.coins])
+
+        value = sum(coin['value'] for coin in tx2.inputs())
+        change_amount=value  - relayFee - fee_estimator(tx.estimated_size())
+
+
+
+        change = [(TYPE_ADDRESS, change_addrs[0],change_amount)]
+        #tx_size=tx2.estimated_size()
+        #fee = lambda count: fee_estimator(tx_size + count * 34)
+        #change = self.change_outputs(tx2, change_addrs, fee, dust_threshold)
+
+        tx2.add_outputs(change)
+
+
         self.print_error("using %d inputs" % len(tx.inputs()))
         self.print_error("using buckets:", [bucket.desc for bucket in buckets])
 
-        return tx
+        return tx, tx2
 
 class CoinChooserOldestFirst(CoinChooserBase):
     '''Maximize transaction priority. Select the oldest unspent
@@ -286,9 +345,16 @@ class CoinChooserPrivacy(CoinChooserRandom):
         return [coin['address'] for coin in coins]
 
     def penalty_func(self, tx):
-        min_change = min(o[2] for o in tx.outputs()) * 0.75
-        max_change = max(o[2] for o in tx.outputs()) * 1.33
-        spent_amount = sum(o[2] for o in tx.outputs())
+
+        '''substitute input for outputs, I don't know what I'm doing here'''
+        if not o:
+            min_change = min(o[2] for o in tx.outputs()) * 0.75
+            max_change = max(o[2] for o in tx.outputs()) * 1.33
+            spent_amount = sum(o[2] for o in tx.outputs())
+        else:
+            min_change = min(coin['value'] for coin in tx.inputs()) * 0.75
+            max_change = max(coin['value'] for coin in tx.inputs()) * 1.33
+            spent_amount = sum(coin['value'] for coin in tx.inputs())
 
         def penalty(buckets):
             badness = len(buckets) - 1

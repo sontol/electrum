@@ -790,7 +790,7 @@ class Abstract_Wallet(PrintError):
         # Change <= dust threshold is added to the tx fee
         return 182 * 3 * self.relayfee() / 1000
 
-    def make_unsigned_transaction(self, inputs, outputs, config, fixed_fee=None, change_addr=None):
+    def make_unsigned_transaction(self, inputs, outputs, config, fixed_fee=None, change_addr=None, isOpReturn=None,isOpMultisig=None):
         # check outputs
         i_max = None
         for i, o in enumerate(outputs):
@@ -839,8 +839,8 @@ class Abstract_Wallet(PrintError):
             # Let the coin chooser select the coins to spend
             max_change = self.max_change_outputs if self.multiple_change else 1
             coin_chooser = coinchooser.get_coin_chooser(config)
-            tx = coin_chooser.make_tx(inputs, outputs, change_addrs[:max_change],
-                                      fee_estimator, self.dust_threshold())
+            tx, tx2 = coin_chooser.make_tx(inputs, outputs, change_addrs[:max_change],
+                                      fee_estimator, self.dust_threshold(), self.relayfee(), isOpReturn, isOpMultisig)
         else:
             sendable = sum(map(lambda x:x['value'], inputs))
             _type, data, value = outputs[i_max]
@@ -850,13 +850,14 @@ class Abstract_Wallet(PrintError):
             amount = max(0, sendable - tx.output_value() - fee)
             outputs[i_max] = (_type, data, amount)
             tx = Transaction.from_io(inputs, outputs[:])
+            tx2 = None
 
         # Sort the inputs and outputs deterministically
         tx.BIP_LI01_sort()
         # Timelock tx to current height.
         tx.locktime = self.get_local_height()
         run_hook('make_unsigned_transaction', self, tx)
-        return tx
+        return tx, tx2
 
     def estimate_fee(self, config, size):
         fee = int(config.fee_per_kb() * size / 1000.)
@@ -1013,6 +1014,11 @@ class Abstract_Wallet(PrintError):
             if tx_age > age:
                 age = tx_age
         return age > age_limit
+
+    def clear_signatures(self,tx):
+        for txin in tx.inputs():
+            txin['signatures'] = [None] * len(txin['signatures'])
+            self.add_input_info(txin)
 
     def bump_fee(self, tx, delta):
         if tx.is_final():

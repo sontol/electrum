@@ -54,7 +54,7 @@ DEFAULT_SERVERS = {
     'erbium1.sytes.net':DEFAULT_PORTS,                  # core, e-x
     'ecdsa.net':{'t':'50001', 's':'110'},               # core, e-x
     'gh05.geekhosters.com':DEFAULT_PORTS,               # core, e-s
-    'VPS.hsmiths.com':DEFAULT_PORTS,                    # core, e-x
+    #'VPS.hsmiths.com':DEFAULT_PORTS,                    # core, e-x
     'electrum.anduck.net':DEFAULT_PORTS,                # core, e-s; banner with version pending
     'electrum.no-ip.org':DEFAULT_PORTS,                 # core, e-s
     'electrum.be':DEFAULT_PORTS,                        # core, e-x
@@ -66,7 +66,7 @@ DEFAULT_SERVERS = {
     'electrum.villocq.com':DEFAULT_PORTS,               # core?, e-s; banner with version recommended
     'us11.einfachmalnettsein.de':DEFAULT_PORTS,         # core, e-x
     'electrum.trouth.net':DEFAULT_PORTS,                # BU, e-s
-    'Electrum.hsmiths.com':{'t':'8080', 's':'995'},     # core, e-x
+    #'Electrum.hsmiths.com':{'t':'8080', 's':'995'},     # core, e-x
     'electrum3.hachre.de':DEFAULT_PORTS,                # core, e-x
     'b.1209k.com':DEFAULT_PORTS,                        # XT, jelectrum
     'elec.luggs.co':{ 's':'443'},                       # core, e-x
@@ -78,7 +78,7 @@ def set_testnet():
     DEFAULT_PORTS = {'t':'51001', 's':'51002'}
     DEFAULT_SERVERS = {
         '14.3.140.101': DEFAULT_PORTS,
-        'testnet.hsmiths.com': {'t':'53011', 's':'53012'},
+        #'testnet.hsmiths.com': {'t':'53011', 's':'53012'},
         'electrum.akinbo.org': DEFAULT_PORTS,
         'ELEX05.blackpole.online': {'t':'52011', 's':'52002'},
     }
