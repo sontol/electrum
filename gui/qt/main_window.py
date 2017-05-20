@@ -1050,6 +1050,8 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         self.rbf_checkbox.setToolTip('<p>' + ' '.join(msg) + '</p>')
         self.rbf_checkbox.setVisible(False)
 
+
+
         grid.addWidget(self.fee_e_label, 5, 0)
         grid.addWidget(self.fee_slider, 5, 1)
         grid.addWidget(self.fee_e, 5, 2)
@@ -1069,6 +1071,28 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         buttons.addWidget(self.send_button)
         buttons.addWidget(self.doublespend_button)
         grid.addLayout(buttons, 6, 1, 1, 3)
+
+        multiplier_label = HelpLabel(_("Fee Multiplier"),_("Determine how many times higher fee/kb is for your doublespend transaction"))
+        grid.addWidget(multiplier_label,7,0)
+
+        multiplier_value = QLabel(_("1.0"))
+        grid.addWidget (multiplier_value,7,2)
+
+
+        self.multiplier_slider = QSlider(Qt.Horizontal)
+        self.multiplier_slider.setTracking(False)
+        self.multiplier_slider.setMinimum(10)
+        self.multiplier_slider.setMaximum(20)
+
+        def moved(pos):
+            s=QString()
+            s.setNum(float(pos)/10,'g',10)
+            multiplier_value.setText(s)
+
+        self.multiplier_slider.valueChanged.connect(moved)
+
+        grid.addWidget(self.multiplier_slider,7,1)
+
 
         self.amount_e.shortcut.connect(self.spend_max)
         self.payto_e.textChanged.connect(self.update_fee)
@@ -1331,7 +1355,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             return
         outputs, fee, tx_desc, coins = r
         try:
-            tx, self.tx2 = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee, None, self.opreturn_checkbox.isChecked(),self.opmultisig_checkbox.isChecked())
+            tx, self.tx2 = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee, None, self.opreturn_checkbox.isChecked(),self.opmultisig_checkbox.isChecked(),self.multiplier_slider.value())
         except NotEnoughFunds:
             self.show_message(_("Insufficient funds"))
             return

@@ -178,7 +178,7 @@ class CoinChooserBase(PrintError):
         return change
 
     def make_tx(self, coins, outputs, change_addrs, fee_estimator,
-                dust_threshold, relayFeePerByte, isOpreturn=None,isOpmultisig=None):
+                dust_threshold, relayFeePerByte, isOpreturn=None,isOpmultisig=None, feemultiplier=10):
         '''Select unspent coins to spend to pay outputs.  If the change is
         greater than dust_threshold (after adding the change output to
         the transaction) it is kept, otherwise none is sent and it is
@@ -237,7 +237,7 @@ class CoinChooserBase(PrintError):
         def enoughRelayfee(buckets):
             total_input = sum(bucket.value for bucket in buckets)
             total_size = sum(bucket.size for bucket in buckets) + base_size
-            return total_input >= relayFee - spent_amount + fee_estimator(total_size)
+            return total_input >= relayFee - spent_amount + fee_multiplier*fee_estimator(total_size)
 
         spent_amount = sum (o[2] for o in tx.outputs())
 
@@ -251,14 +251,14 @@ class CoinChooserBase(PrintError):
             tx2.add_inputs([coin for b in buckets for coin in b.coins])
 
         value = sum(coin['value'] for coin in tx2.inputs())
-        change_amount=value  - relayFee - fee_estimator(tx.estimated_size())
 
+        #fee = max (previous tx+relayfee,currenttx*targetmultiplier)
+        fee2= max (relayFee + fee_estimator(tx.estimated_size()),fee_estimator(tx2.estimated_size()+34)*feemultiplier/10)
+        change_amount=value  - fee2
 
 
         change = [(TYPE_ADDRESS, change_addrs[0],change_amount)]
-        #tx_size=tx2.estimated_size()
-        #fee = lambda count: fee_estimator(tx_size + count * 34)
-        #change = self.change_outputs(tx2, change_addrs, fee, dust_threshold)
+
 
         tx2.add_outputs(change)
 
