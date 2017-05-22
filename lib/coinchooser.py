@@ -237,12 +237,12 @@ class CoinChooserBase(PrintError):
         def enoughRelayfee(buckets):
             total_input = sum(bucket.value for bucket in buckets)
             total_size = sum(bucket.size for bucket in buckets) + base_size
-            return total_input >= relayFee - spent_amount + fee_multiplier*fee_estimator(total_size)
+            return total_input >= max(relayFee - spent_amount + feemultiplier*fee_estimator(total_size),feemultiplier*fee_estimator(tx_size+34)-fee_estimator(tx.estimated_size())+feemultiplier*fee_estimator(total_size))
 
         spent_amount = sum (o[2] for o in tx.outputs())
 
         #Do we have enough to cover additional relay fees?
-        if spent_amount < relayFee:
+        if spent_amount < relayFee or spent_amount < feemultiplier*fee_estimator(tx_size+34):
             unselected_coins=coins[:]
             for coin in tx.inputs():
                   unselected_coins.remove(coin)
@@ -347,7 +347,7 @@ class CoinChooserPrivacy(CoinChooserRandom):
     def penalty_func(self, tx):
 
         '''substitute input for outputs, I don't know what I'm doing here'''
-        if not o:
+        if tx.outputs():
             min_change = min(o[2] for o in tx.outputs()) * 0.75
             max_change = max(o[2] for o in tx.outputs()) * 1.33
             spent_amount = sum(o[2] for o in tx.outputs())
