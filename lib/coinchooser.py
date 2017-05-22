@@ -233,13 +233,15 @@ class CoinChooserBase(PrintError):
         #relay fee = relayfee/byte * (current tx size + 1 output)
         relayFee=relayFeePerByte * (tx_size + 34)/1000 + 1
 
+        spent_amount = sum (o[2] for o in tx.outputs())
+        value = sum(coin['value'] for coin in tx.inputs())
+        feetx1= value-spent_amount
+
 
         def enoughRelayfee(buckets):
             total_input = sum(bucket.value for bucket in buckets)
             total_size = sum(bucket.size for bucket in buckets) + base_size
-            return total_input >= max(relayFee - spent_amount + feemultiplier*fee_estimator(total_size),feemultiplier*fee_estimator(tx_size+34)-fee_estimator(tx.estimated_size())+feemultiplier*fee_estimator(total_size))
-
-        spent_amount = sum (o[2] for o in tx.outputs())
+            return total_input >= max(relayFee - spent_amount + fee_estimator(total_size),feemultiplier*fee_estimator(tx_size+34)-feetx1+feemultiplier*fee_estimator(total_size))
 
         #Do we have enough to cover additional relay fees?
         if spent_amount < relayFee or spent_amount < feemultiplier*fee_estimator(tx_size+34):
@@ -253,7 +255,7 @@ class CoinChooserBase(PrintError):
         value = sum(coin['value'] for coin in tx2.inputs())
 
         #fee = max (previous tx+relayfee,currenttx*targetmultiplier)
-        fee2= max (relayFee + fee_estimator(tx.estimated_size()),fee_estimator(tx2.estimated_size()+34)*feemultiplier/10)
+        fee2= max (relayFee + feetx1,fee_estimator(tx2.estimated_size()+34)*feemultiplier/10)
         change_amount=value  - fee2
 
 
