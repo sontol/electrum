@@ -1044,12 +1044,23 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
                _('and you will have the possiblity, while it is unconfirmed, to replace it with a transaction that pays a higher fee.'),
                _('Note that some merchants do not accept non-final transactions until they are confirmed.')]
         self.rbf_checkbox.setToolTip('<p>' + ' '.join(msg) + '</p>')
-        self.rbf_checkbox.setVisible(False)
+        self.rbf_checkbox.setVisible(True)
 
         grid.addWidget(self.fee_e_label, 5, 0)
         grid.addWidget(self.fee_slider, 5, 1)
         grid.addWidget(self.fee_e, 5, 2)
         grid.addWidget(self.rbf_checkbox, 5, 3)
+
+        msg = [_('the minimum block number for this transaction to be mined')]
+        self.nLocktime_label=HelpLabel(_("nLocktime"),msg)
+        grid.addWidget(self.nLocktime_label,6,0)
+
+        self.nLocktime_input = QLineEdit()
+        self.nLocktime_input.setValidator(QIntValidator())
+        self.nLocktime_input.setMaxLength(9)
+        self.nLocktime_input.setAlignment(Qt.AlignRight)
+        grid.addWidget(self.nLocktime_input, 6, 1)
+
 
         self.preview_button = EnterButton(_("Preview"), self.do_preview)
         self.preview_button.setToolTip(_('Display the details of your transactions before signing it.'))
@@ -1060,7 +1071,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         buttons.addWidget(self.clear_button)
         buttons.addWidget(self.preview_button)
         buttons.addWidget(self.send_button)
-        grid.addLayout(buttons, 6, 1, 1, 3)
+        grid.addLayout(buttons, 7, 1, 1, 3)
 
         self.amount_e.shortcut.connect(self.spend_max)
         self.payto_e.textChanged.connect(self.update_fee)
@@ -1287,6 +1298,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         self.do_send(preview = True)
 
     def do_send(self, preview = False):
+        nLocktime,ret=self.nLocktime_input.text().toInt()
         if run_hook('abort_send', self):
             return
         r = self.read_send_tab()
@@ -1294,7 +1306,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             return
         outputs, fee, tx_desc, coins = r
         try:
-            tx = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee)
+            tx = self.wallet.make_unsigned_transaction(coins, outputs, self.config, fee,nLocktime=nLocktime)
         except NotEnoughFunds:
             self.show_message(_("Insufficient funds"))
             return
@@ -2880,6 +2892,17 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         vbox.addWidget(fee_slider)
         cb = QCheckBox(_('Final'))
         vbox.addWidget(cb)
+
+        from paytoedit import PayToEdit
+        msg = _('Recipient of the funds.') + '\n\n' \
+              + _(
+            'New address to send to')
+        payto_label = HelpLabel(_('Pay to'), msg)
+        vbox.addWidget(payto_label)
+
+
+        new_output = PayToEdit(self)
+        vbox.addWidget(new_output)
         vbox.addLayout(Buttons(CancelButton(d), OkButton(d)))
         if not d.exec_():
             return

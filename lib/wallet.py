@@ -790,7 +790,7 @@ class Abstract_Wallet(PrintError):
         # Change <= dust threshold is added to the tx fee
         return 182 * 3 * self.relayfee() / 1000
 
-    def make_unsigned_transaction(self, inputs, outputs, config, fixed_fee=None, change_addr=None):
+    def make_unsigned_transaction(self, inputs, outputs, config, fixed_fee=None, change_addr=None,nLocktime=0):
         # check outputs
         i_max = None
         for i, o in enumerate(outputs):
@@ -840,21 +840,21 @@ class Abstract_Wallet(PrintError):
             max_change = self.max_change_outputs if self.multiple_change else 1
             coin_chooser = coinchooser.get_coin_chooser(config)
             tx = coin_chooser.make_tx(inputs, outputs, change_addrs[:max_change],
-                                      fee_estimator, self.dust_threshold())
+                                      fee_estimator, self.dust_threshold(),nLocktime=nLocktime)
         else:
             sendable = sum(map(lambda x:x['value'], inputs))
             _type, data, value = outputs[i_max]
             outputs[i_max] = (_type, data, 0)
-            tx = Transaction.from_io(inputs, outputs[:])
+            tx = Transaction.from_io(inputs, outputs[:],nLocktime)
             fee = fee_estimator(tx.estimated_size())
             amount = max(0, sendable - tx.output_value() - fee)
             outputs[i_max] = (_type, data, amount)
-            tx = Transaction.from_io(inputs, outputs[:])
+            tx = Transaction.from_io(inputs, outputs[:],nLocktime)
 
         # Sort the inputs and outputs deterministically
         tx.BIP_LI01_sort()
         # Timelock tx to current height.
-        tx.locktime = self.get_local_height()
+        #tx.locktime = self.get_local_height()
         run_hook('make_unsigned_transaction', self, tx)
         return tx
 
