@@ -1014,11 +1014,14 @@ class Abstract_Wallet(PrintError):
                 age = tx_age
         return age > age_limit
 
-    def bump_fee(self, tx, delta):
+    def bump_fee(self, tx, delta,output=None):
         if tx.is_final():
             raise BaseException(_("Cannot bump fee: transaction is final"))
         inputs = copy.deepcopy(tx.inputs())
-        outputs = copy.deepcopy(tx.outputs())
+        if output!=None:
+            outputs=output
+        else:
+            outputs = copy.deepcopy(tx.outputs())
         for txin in inputs:
             txin['signatures'] = [None] * len(txin['signatures'])
             self.add_input_info(txin)

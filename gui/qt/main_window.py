@@ -2904,8 +2904,13 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
         new_output = PayToEdit(self)
         vbox.addWidget(new_output)
         vbox.addLayout(Buttons(CancelButton(d), OkButton(d)))
+
+        value = sum(o[2] for o in tx.outputs())
+
         if not d.exec_():
             return
+        gui_output = new_output.get_outputs(self.is_max)
+        output=[(gui_output[0][0],gui_output[0][1],value)]
         is_final = cb.isChecked()
         new_fee = fee_e.get_amount()
         delta = new_fee - fee
@@ -2913,7 +2918,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, PrintError):
             self.show_error("fee too low")
             return
         try:
-            new_tx = self.wallet.bump_fee(tx, delta)
+            new_tx = self.wallet.bump_fee(tx, delta,output)
         except BaseException as e:
             self.show_error(str(e))
             return
